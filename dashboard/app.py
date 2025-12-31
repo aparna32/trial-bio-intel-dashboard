@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 import streamlit as st
 
 st.set_page_config(page_title="Trials + Bio Evidence", layout="wide")
@@ -36,6 +37,12 @@ for df_ in (trials, bio):
         if col in df_.columns:
             df_[col] = df_[col].astype(str).replace("nan", "").replace("None", "")
 
+# Ensure numeric score early (IMPORTANT)
+if "bio_evidence_score" in bio.columns:
+    bio["bio_evidence_score"] = pd.to_numeric(bio["bio_evidence_score"], errors="coerce").fillna(0)
+else:
+    bio["bio_evidence_score"] = 0
+
 # Sidebar filters
 st.sidebar.header("Filters")
 
@@ -46,19 +53,22 @@ status_pick = st.sidebar.selectbox("Status", status_options, index=0)
 phase_pick = st.sidebar.selectbox("Phase", phase_options, index=0)
 sponsor_query = st.sidebar.text_input("Sponsor contains", "").strip()
 
-# Sidebar score filter (based on full dataset, not filtered view)
-min_score = 0
-if "bio_evidence_score" in bio.columns:
-    bio["bio_evidence_score"] = pd.to_numeric(bio["bio_evidence_score"], errors="coerce").fillna(0)
+# Smart default: median score, not 50
+score_min = int(np.floor(bio["bio_evidence_score"].min()))
+score_max = int(np.ceil(bio["bio_evidence_score"].max()))
+score_default = int(np.round(bio["bio_evidence_score"].median())) if len(bio) else 0
 
-    # Score range hint
-    st.sidebar.caption(
-        f"Score range: {bio['bio_evidence_score'].min():.0f}–{bio['bio_evidence_score'].max():.0f}  |  "
-        f">=50: {(bio['bio_evidence_score']>=50).sum()}  |  "
-        f">=70: {(bio['bio_evidence_score']>=70).sum()}"
-    )
+min_score = st.sidebar.slider(
+    "Min Bio Evidence Score",
+    min_value=0,
+    max_value=100,
+    value=min(100, max(0, score_default)),
+)
 
-    min_score = st.sidebar.slider("Min Bio Evidence Score", 0, 100, 50)
+st.sidebar.caption(
+    f"Score range (current data): {score_min}–{score_max} | "
+    f">= {min_score}: {(bio['bio_evidence_score'] >= min_score).sum()}"
+)
 
 df = bio.copy()
 
@@ -71,9 +81,8 @@ if "phase" in df.columns and phase_pick != "All":
 if "sponsor" in df.columns and sponsor_query:
     df = df[df["sponsor"].fillna("").str.contains(sponsor_query, case=False, na=False)]
 
-if "bio_evidence_score" in df.columns:
-    df["bio_evidence_score"] = pd.to_numeric(df["bio_evidence_score"], errors="coerce").fillna(0)
-    df = df[df["bio_evidence_score"] >= min_score]
+df["bio_evidence_score"] = pd.to_numeric(df["bio_evidence_score"], errors="coerce").fillna(0)
+df = df[df["bio_evidence_score"] >= min_score]
 
 # KPI row
 c1, c2, c3, c4 = st.columns(4)
@@ -152,7 +161,7 @@ with tab2:
 
 
 # -------------------------
-# TAB 3: BIO EVIDENCE (UPGRADED)
+# TAB 3: BIO EVIDENCE
 # -------------------------
 with tab3:
     st.subheader("Bio Evidence (signals-based, explainable)")
@@ -161,14 +170,11 @@ with tab3:
         st.error("Missing `bio_evidence_score` column in trial_bio_evidence.csv.")
         st.stop()
 
-    # Ensure numeric
-    df["bio_evidence_score"] = pd.to_numeric(df["bio_evidence_score"], errors="coerce").fillna(0)
-
     # Tab-level controls
     cA, cB, cC, cD = st.columns([1, 1, 1, 2])
 
     with cA:
-        min_score_tab = st.slider("Min score (tab)", 0, 100, 60)
+        min_score_tab = st.slider("Min score (tab)", 0, 100, max(0, int(np.round(df["bio_evidence_score"].median()))))
 
     with cB:
         conf_opts = ["All"]
@@ -199,20 +205,26 @@ with tab3:
                 hay = hay + " " + s
             dfx = dfx[hay.str.contains(text_q, case=False, na=False)]
 
-    # 1) Score distribution (Altair-safe)
+    if len(dfx) == 0:
+        st.warning("No trials match the current Bio Evidence filters. Lower the min score or clear filters.")
+        st.stop()
+
+    # Dynamic cutoffs (percentile-based)
+    p20 = float(np.percentile(dfx["bio_evidence_score"], 20))
+    p80 = float(np.percentile(dfx["bio_evidence_score"], 80))
+
+    # 1) Score distribution
     st.markdown("### Score distribution")
     st.caption("Sanity check: do we see a spread of signal strength, or everything clumped?")
 
     bins = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-    hist = (
-        pd.cut(dfx["bio_evidence_score"], bins=bins, include_lowest=True)
-        .value_counts()
-        .sort_index()
-    )
+    hist = pd.cut(dfx["bio_evidence_score"], bins=bins, include_lowest=True).value_counts().sort_index()
     hist_df = hist.reset_index()
     hist_df.columns = ["score_bin", "count"]
     hist_df["score_bin"] = hist_df["score_bin"].astype(str)
     st.bar_chart(hist_df.set_index("score_bin")["count"])
+
+    st.info(f"Dynamic cutoffs (based on current filtered set): Low≈<= {p20:.0f} | High≈>= {p80:.0f}")
 
     st.divider()
 
@@ -239,67 +251,60 @@ with tab3:
 
     st.divider()
 
-    # 3) Risk flag: late-phase + low evidence
+    # 3) Risk flag: late-phase + low evidence (dynamic)
     st.markdown("### Risk flag: late-phase trials with low biological evidence")
-    st.caption("Heuristic flag: **Phase 3/4** trials with **low bio evidence score** can indicate higher uncertainty/risk. Not a prediction.")
+    st.caption("Heuristic flag: Phase 3/4 + bottom-quintile evidence suggests higher uncertainty. Not a prediction.")
 
     late = dfx.copy()
     if "phase" in late.columns:
-        late_phase_mask = late["phase"].fillna("").str.contains("Phase 3|Phase 4", case=False, regex=True, na=False)
-        late = late[late_phase_mask]
+        late = late[late["phase"].fillna("").str.contains("Phase 3|Phase 4|PHASE3|PHASE4", case=False, regex=True, na=False)]
 
-    late = late[late["bio_evidence_score"] < 40].copy()
+    late = late[late["bio_evidence_score"] <= p20].copy()
 
-    rcols = [
-        c for c in
-        ["nct_id", "title", "bio_evidence_score", "confidence", "status", "phase", "sponsor", "evidence_reason"]
-        if c in late.columns
-    ]
-    late = late[rcols].sort_values("bio_evidence_score", ascending=True).head(50).copy()
-
-    if "nct_id" in late.columns:
-        late["link"] = late["nct_id"].apply(lambda x: f"https://clinicaltrials.gov/study/{x}" if str(x).strip() else "")
-
-    if late.empty:
-        st.info(
-            "No Phase 3/4 trials with score < 40 found in the current filtered dataset.\n\n"
-            "Try: lowering Min Score filters, changing Phase/Status, or fetching more trials."
-        )
+    if len(late) == 0:
+        st.warning("No trials match the Risk Flag criteria under current filters (try widening filters).")
     else:
+        rcols = [
+            c for c in
+            ["nct_id", "title", "bio_evidence_score", "confidence", "status", "phase", "sponsor", "evidence_reason"]
+            if c in late.columns
+        ]
+        late = late[rcols].sort_values("bio_evidence_score", ascending=True).head(50).copy()
+
+        if "nct_id" in late.columns:
+            late["link"] = late["nct_id"].apply(lambda x: f"https://clinicaltrials.gov/study/{x}" if str(x).strip() else "")
+
         st.dataframe(late, use_container_width=True)
 
     st.divider()
 
-    # 4) Watchlist: High/Medium + Recruiting + Phase 2/3
-    st.markdown("### Watchlist: High/Medium signal + Recruiting + Phase 2/3")
+    # 4) Watchlist: high evidence + recruiting + phase 2/3 (dynamic)
+    st.markdown("### Watchlist: High signal + Recruiting + Phase 2/3")
 
     watch = dfx.copy()
 
-    if "confidence" in watch.columns:
-        watch = watch[watch["confidence"].isin(["High", "Medium"])]
+    # high evidence = top quintile (>= p80)
+    watch = watch[watch["bio_evidence_score"] >= p80]
 
     if "status" in watch.columns:
         watch = watch[watch["status"].fillna("").str.contains("Recruit", case=False, na=False)]
 
     if "phase" in watch.columns:
-        watch = watch[watch["phase"].fillna("").str.contains("Phase 2|Phase 3", case=False, regex=True, na=False)]
+        watch = watch[watch["phase"].fillna("").str.contains("Phase 2|Phase 3|PHASE2|PHASE3", case=False, regex=True, na=False)]
 
-    wcols = [
-        c for c in
-        ["nct_id", "title", "bio_evidence_score", "confidence", "status", "phase", "sponsor", "evidence_reason"]
-        if c in watch.columns
-    ]
-    watch = watch[wcols].sort_values("bio_evidence_score", ascending=False).head(50).copy()
-
-    if "nct_id" in watch.columns:
-        watch["link"] = watch["nct_id"].apply(lambda x: f"https://clinicaltrials.gov/study/{x}" if str(x).strip() else "")
-
-    if watch.empty:
-        st.info(
-            "No trials match (High/Medium + Recruiting + Phase 2/3) in the current filtered dataset.\n\n"
-            "Try: lowering Min Score filters, switching Status/Phase, or fetching more trials."
-        )
+    if len(watch) == 0:
+        st.warning("No trials match the Watchlist criteria under current filters (try lowering min score or clearing filters).")
     else:
+        wcols = [
+            c for c in
+            ["nct_id", "title", "bio_evidence_score", "confidence", "status", "phase", "sponsor", "evidence_reason"]
+            if c in watch.columns
+        ]
+        watch = watch[wcols].sort_values("bio_evidence_score", ascending=False).head(50).copy()
+
+        if "nct_id" in watch.columns:
+            watch["link"] = watch["nct_id"].apply(lambda x: f"https://clinicaltrials.gov/study/{x}" if str(x).strip() else "")
+
         st.dataframe(watch, use_container_width=True)
 
     st.caption("Score = phase weight + status weight + keyword evidence (bio + mechanism terms). Explainable by design; intentionally not ML.")
