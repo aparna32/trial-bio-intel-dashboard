@@ -84,7 +84,3 @@ _(Screenshots added in the next step)_
 
 Built by **Aparna Bhardwaj**  
 Focused on analytics, bioinformatics, and risk-driven decision systems
-
-
-### 🚀 Live App
-👉 https://trial-bio-intel.streamlit.app/
