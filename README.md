@@ -1,2 +1,10 @@
-# trial-bio-intel-dashboard
-Live analytics dashboard combining ClinicalTrials.gov data with meta-gene evidence to monitor trial activity, biological signals, and early risk indicators.
+## 🔬 Live Clinical Trial Intelligence Dashboard
+
+A production-grade analytics system that:
+- Pulls live data from ClinicalTrials.gov (Python)
+- Generates bio/clinical summaries (R)
+- Serves an interactive dashboard (Streamlit)
+- Auto-refreshes weekly via GitHub Actions
+
+### 🚀 Live App
+👉 https://trial-bio-intel.streamlit.app/
