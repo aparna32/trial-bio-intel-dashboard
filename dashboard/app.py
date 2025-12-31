@@ -5,6 +5,7 @@ import streamlit as st
 st.set_page_config(page_title="Trials + Bio Evidence", layout="wide")
 st.title("Clinical Trials + Bio Evidence Dashboard")
 
+
 def must_exist(path: str):
     if not os.path.exists(path):
         st.error(
@@ -13,11 +14,14 @@ def must_exist(path: str):
         )
         st.stop()
 
+
 def safe_unique(series: pd.Series):
     if series is None or series.empty:
         return []
     return sorted([x for x in series.dropna().unique()])
 
+
+# Required files
 must_exist("data_processed/trials_clean.csv")
 must_exist("data_processed/trial_status_summary.csv")
 must_exist("data_processed/trial_bio_evidence.csv")
@@ -26,11 +30,13 @@ trials = pd.read_csv("data_processed/trials_clean.csv")
 status_summary = pd.read_csv("data_processed/trial_status_summary.csv")
 bio = pd.read_csv("data_processed/trial_bio_evidence.csv")
 
-for df in (trials, bio):
-    for col in ["status", "phase", "sponsor", "nct_id", "title", "conditions"]:
-        if col in df.columns:
-            df[col] = df[col].astype(str).replace("nan", "").replace("None", "")
+# Light cleanup for display
+for df_ in (trials, bio):
+    for col in ["status", "phase", "sponsor", "nct_id", "title", "conditions", "confidence", "evidence_reason"]:
+        if col in df_.columns:
+            df_[col] = df_[col].astype(str).replace("nan", "").replace("None", "")
 
+# Sidebar filters
 st.sidebar.header("Filters")
 
 status_options = ["All"] + safe_unique(bio["status"]) if "status" in bio.columns else ["All"]
@@ -40,9 +46,18 @@ status_pick = st.sidebar.selectbox("Status", status_options, index=0)
 phase_pick = st.sidebar.selectbox("Phase", phase_options, index=0)
 sponsor_query = st.sidebar.text_input("Sponsor contains", "").strip()
 
+# Sidebar score filter (based on full dataset, not filtered view)
 min_score = 0
 if "bio_evidence_score" in bio.columns:
     bio["bio_evidence_score"] = pd.to_numeric(bio["bio_evidence_score"], errors="coerce").fillna(0)
+
+    # Score range hint
+    st.sidebar.caption(
+        f"Score range: {bio['bio_evidence_score'].min():.0f}–{bio['bio_evidence_score'].max():.0f}  |  "
+        f">=50: {(bio['bio_evidence_score']>=50).sum()}  |  "
+        f">=70: {(bio['bio_evidence_score']>=70).sum()}"
+    )
+
     min_score = st.sidebar.slider("Min Bio Evidence Score", 0, 100, 50)
 
 df = bio.copy()
@@ -57,8 +72,10 @@ if "sponsor" in df.columns and sponsor_query:
     df = df[df["sponsor"].fillna("").str.contains(sponsor_query, case=False, na=False)]
 
 if "bio_evidence_score" in df.columns:
+    df["bio_evidence_score"] = pd.to_numeric(df["bio_evidence_score"], errors="coerce").fillna(0)
     df = df[df["bio_evidence_score"] >= min_score]
 
+# KPI row
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Trials loaded", len(trials))
 c2.metric("Filtered trials", len(df))
@@ -70,6 +87,9 @@ st.divider()
 
 tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Trial Finder", "Bio Evidence", "Sponsors"])
 
+# -------------------------
+# TAB 1: OVERVIEW
+# -------------------------
 with tab1:
     left, right = st.columns(2)
 
@@ -92,11 +112,30 @@ with tab1:
 
     st.caption("Source: ClinicalTrials.gov • Pipeline: Python + R • Automation: GitHub Actions • UI: Streamlit")
 
+
+# -------------------------
+# TAB 2: TRIAL FINDER
+# -------------------------
 with tab2:
-    st.subheader("Trial Finder (clickable NCT IDs) — uses Bio table + filters")
+    st.subheader("Trial Finder (uses Bio table + sidebar filters)")
     st.write("This table respects your sidebar filters.")
 
-    show_cols = [c for c in ["nct_id", "title", "status", "phase", "sponsor", "conditions", "bio_evidence_score", "confidence", "pulled_at"] if c in df.columns]
+    show_cols = [
+        c
+        for c in [
+            "nct_id",
+            "title",
+            "status",
+            "phase",
+            "sponsor",
+            "conditions",
+            "bio_evidence_score",
+            "confidence",
+            "evidence_reason",
+            "pulled_at",
+        ]
+        if c in df.columns
+    ]
     view = df[show_cols].copy() if show_cols else df.copy()
 
     if "nct_id" in view.columns:
@@ -111,24 +150,130 @@ with tab2:
         mime="text/csv",
     )
 
+
+# -------------------------
+# TAB 3: BIO EVIDENCE (UPGRADED)
+# -------------------------
 with tab3:
-    st.subheader("Bio Evidence Ranking (signals-based, explainable)")
+    st.subheader("Bio Evidence (signals-based, explainable)")
 
     if "bio_evidence_score" not in df.columns:
         st.error("Missing `bio_evidence_score` column in trial_bio_evidence.csv.")
         st.stop()
 
-    cols = [c for c in ["nct_id", "title", "bio_evidence_score", "confidence", "evidence_reason", "status", "phase", "sponsor"] if c in df.columns]
-    rank = df[cols].sort_values("bio_evidence_score", ascending=False).head(50).copy()
+    # Ensure numeric
+    df["bio_evidence_score"] = pd.to_numeric(df["bio_evidence_score"], errors="coerce").fillna(0)
+
+    # Tab-level controls
+    cA, cB, cC, cD = st.columns([1, 1, 1, 2])
+
+    with cA:
+        min_score_tab = st.slider("Min score (tab)", 0, 100, 60)
+
+    with cB:
+        conf_opts = ["All"]
+        if "confidence" in df.columns:
+            conf_opts += sorted(df["confidence"].replace("", pd.NA).dropna().unique().tolist())
+        conf_pick = st.selectbox("Confidence", conf_opts, index=0)
+
+    with cC:
+        top_n = st.selectbox("Top N", [25, 50, 100, 200], index=1)
+
+    with cD:
+        text_q = st.text_input("Search title/conditions/sponsor", "").strip()
+
+    # Apply tab-level filters
+    dfx = df[df["bio_evidence_score"] >= min_score_tab].copy()
+
+    if "confidence" in dfx.columns and conf_pick != "All":
+        dfx = dfx[dfx["confidence"] == conf_pick]
+
+    if text_q:
+        hay_parts = []
+        for col in ["title", "conditions", "sponsor"]:
+            if col in dfx.columns:
+                hay_parts.append(dfx[col].fillna("").astype(str))
+        if hay_parts:
+            hay = hay_parts[0]
+            for s in hay_parts[1:]:
+                hay = hay + " " + s
+            dfx = dfx[hay.str.contains(text_q, case=False, na=False)]
+
+    # 1) Score distribution (Altair-safe)
+    st.markdown("### Score distribution")
+    st.caption("Sanity check: do we see a spread of signal strength, or everything clumped?")
+
+    bins = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    hist = (
+        pd.cut(dfx["bio_evidence_score"], bins=bins, include_lowest=True)
+        .value_counts()
+        .sort_index()
+    )
+    hist_df = hist.reset_index()
+    hist_df.columns = ["score_bin", "count"]
+    hist_df["score_bin"] = hist_df["score_bin"].astype(str)
+    st.bar_chart(hist_df.set_index("score_bin")["count"])
+
+    st.divider()
+
+    # 2) Top ranked trials
+    st.markdown(f"### Top {int(top_n)} trials by Bio Evidence Score")
+    cols = [
+        c for c in
+        ["nct_id", "title", "bio_evidence_score", "confidence", "status", "phase", "sponsor", "evidence_reason"]
+        if c in dfx.columns
+    ]
+    rank = dfx[cols].sort_values("bio_evidence_score", ascending=False).head(int(top_n)).copy()
 
     if "nct_id" in rank.columns:
         rank["link"] = rank["nct_id"].apply(lambda x: f"https://clinicaltrials.gov/study/{x}" if str(x).strip() else "")
 
-    st.markdown("### Top 50 by Bio Evidence Score")
     st.dataframe(rank, use_container_width=True)
 
-    st.markdown("### Watchlist (High/Medium signal + Recruiting + Phase 2/3)")
-    watch = df.copy()
+    st.download_button(
+        "Download ranked trials (CSV)",
+        data=rank.to_csv(index=False).encode("utf-8"),
+        file_name="ranked_trials_bio_evidence.csv",
+        mime="text/csv",
+    )
+
+    st.divider()
+
+    # 3) Risk flag: late-phase + low evidence
+    st.markdown("### Risk flag: late-phase trials with low biological evidence")
+    st.caption("Heuristic flag: **Phase 3/4** trials with **low bio evidence score** can indicate higher uncertainty/risk. Not a prediction.")
+
+    late = dfx.copy()
+    if "phase" in late.columns:
+        late_phase_mask = late["phase"].fillna("").str.contains("Phase 3|Phase 4", case=False, regex=True, na=False)
+        late = late[late_phase_mask]
+
+    late = late[late["bio_evidence_score"] < 40].copy()
+
+    rcols = [
+        c for c in
+        ["nct_id", "title", "bio_evidence_score", "confidence", "status", "phase", "sponsor", "evidence_reason"]
+        if c in late.columns
+    ]
+    late = late[rcols].sort_values("bio_evidence_score", ascending=True).head(50).copy()
+
+    if "nct_id" in late.columns:
+        late["link"] = late["nct_id"].apply(lambda x: f"https://clinicaltrials.gov/study/{x}" if str(x).strip() else "")
+
+    if late.empty:
+        st.info(
+            "No Phase 3/4 trials with score < 40 found in the current filtered dataset.\n\n"
+            "Try: lowering Min Score filters, changing Phase/Status, or fetching more trials."
+        )
+    else:
+        st.dataframe(late, use_container_width=True)
+
+    st.divider()
+
+    # 4) Watchlist: High/Medium + Recruiting + Phase 2/3
+    st.markdown("### Watchlist: High/Medium signal + Recruiting + Phase 2/3")
+
+    watch = dfx.copy()
 
     if "confidence" in watch.columns:
         watch = watch[watch["confidence"].isin(["High", "Medium"])]
@@ -139,14 +284,30 @@ with tab3:
     if "phase" in watch.columns:
         watch = watch[watch["phase"].fillna("").str.contains("Phase 2|Phase 3", case=False, regex=True, na=False)]
 
-    wcols = [c for c in ["nct_id", "title", "bio_evidence_score", "confidence", "status", "phase", "sponsor"] if c in watch.columns]
-    watch = watch[wcols].sort_values("bio_evidence_score", ascending=False).head(30).copy()
+    wcols = [
+        c for c in
+        ["nct_id", "title", "bio_evidence_score", "confidence", "status", "phase", "sponsor", "evidence_reason"]
+        if c in watch.columns
+    ]
+    watch = watch[wcols].sort_values("bio_evidence_score", ascending=False).head(50).copy()
 
     if "nct_id" in watch.columns:
         watch["link"] = watch["nct_id"].apply(lambda x: f"https://clinicaltrials.gov/study/{x}" if str(x).strip() else "")
 
-    st.dataframe(watch, use_container_width=True)
+    if watch.empty:
+        st.info(
+            "No trials match (High/Medium + Recruiting + Phase 2/3) in the current filtered dataset.\n\n"
+            "Try: lowering Min Score filters, switching Status/Phase, or fetching more trials."
+        )
+    else:
+        st.dataframe(watch, use_container_width=True)
 
+    st.caption("Score = phase weight + status weight + keyword evidence (bio + mechanism terms). Explainable by design; intentionally not ML.")
+
+
+# -------------------------
+# TAB 4: SPONSORS
+# -------------------------
 with tab4:
     st.subheader("Top Sponsors (filtered view)")
     if "sponsor" in df.columns:
