@@ -53,16 +53,20 @@ status_pick = st.sidebar.selectbox("Status", status_options, index=0)
 phase_pick = st.sidebar.selectbox("Phase", phase_options, index=0)
 sponsor_query = st.sidebar.text_input("Sponsor contains", "").strip()
 
-# Smart default: median score, not 50
-score_min = int(np.floor(bio["bio_evidence_score"].min()))
-score_max = int(np.ceil(bio["bio_evidence_score"].max()))
+# Smart slider bounds based on actual data (FIXED)
+score_min = int(np.floor(bio["bio_evidence_score"].min())) if len(bio) else 0
+score_max = int(np.ceil(bio["bio_evidence_score"].max())) if len(bio) else 0
 score_default = int(np.round(bio["bio_evidence_score"].median())) if len(bio) else 0
+
+# Safety: if all scores same, keep slider valid
+if score_max < score_min:
+    score_min, score_max = 0, 0
 
 min_score = st.sidebar.slider(
     "Min Bio Evidence Score",
-    min_value=0,
-    max_value=100,
-    value=min(100, max(0, score_default)),
+    min_value=int(score_min),
+    max_value=int(score_max),
+    value=int(np.clip(score_default, score_min, score_max)),
 )
 
 st.sidebar.caption(
@@ -173,8 +177,20 @@ with tab3:
     # Tab-level controls
     cA, cB, cC, cD = st.columns([1, 1, 1, 2])
 
+    # FIXED: tab slider bounds based on actual (already-filtered) df
+    tab_min = int(np.floor(df["bio_evidence_score"].min())) if len(df) else 0
+    tab_max = int(np.ceil(df["bio_evidence_score"].max())) if len(df) else 0
+    tab_default = int(np.round(df["bio_evidence_score"].median())) if len(df) else 0
+    if tab_max < tab_min:
+        tab_min, tab_max = 0, 0
+
     with cA:
-        min_score_tab = st.slider("Min score (tab)", 0, 100, max(0, int(np.round(df["bio_evidence_score"].median()))))
+        min_score_tab = st.slider(
+            "Min score (tab)",
+            min_value=int(tab_min),
+            max_value=int(tab_max),
+            value=int(np.clip(tab_default, tab_min, tab_max)),
+        )
 
     with cB:
         conf_opts = ["All"]
