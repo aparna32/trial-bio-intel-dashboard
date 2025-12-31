@@ -5,9 +5,6 @@ import streamlit as st
 st.set_page_config(page_title="Trials + Bio Evidence", layout="wide")
 st.title("Clinical Trials + Bio Evidence Dashboard")
 
-# ----------------------------
-# Helpers
-# ----------------------------
 def must_exist(path: str):
     if not os.path.exists(path):
         st.error(
@@ -21,29 +18,19 @@ def safe_unique(series: pd.Series):
         return []
     return sorted([x for x in series.dropna().unique()])
 
-# ----------------------------
-# Required data files
-# ----------------------------
 must_exist("data_processed/trials_clean.csv")
 must_exist("data_processed/trial_status_summary.csv")
 must_exist("data_processed/trial_bio_evidence.csv")
 
-# ----------------------------
-# Load data
-# ----------------------------
 trials = pd.read_csv("data_processed/trials_clean.csv")
 status_summary = pd.read_csv("data_processed/trial_status_summary.csv")
 bio = pd.read_csv("data_processed/trial_bio_evidence.csv")
 
-# Normalize common columns if present (avoid minor schema differences)
 for df in (trials, bio):
     for col in ["status", "phase", "sponsor", "nct_id", "title", "conditions"]:
         if col in df.columns:
             df[col] = df[col].astype(str).replace("nan", "").replace("None", "")
 
-# ----------------------------
-# Sidebar filters (applied to bio table)
-# ----------------------------
 st.sidebar.header("Filters")
 
 status_options = ["All"] + safe_unique(bio["status"]) if "status" in bio.columns else ["All"]
@@ -55,11 +42,9 @@ sponsor_query = st.sidebar.text_input("Sponsor contains", "").strip()
 
 min_score = 0
 if "bio_evidence_score" in bio.columns:
-    # ensure numeric
     bio["bio_evidence_score"] = pd.to_numeric(bio["bio_evidence_score"], errors="coerce").fillna(0)
     min_score = st.sidebar.slider("Min Bio Evidence Score", 0, 100, 50)
 
-# Filtered dataframe for Bio Evidence + Sponsors views
 df = bio.copy()
 
 if "status" in df.columns and status_pick != "All":
@@ -74,26 +59,17 @@ if "sponsor" in df.columns and sponsor_query:
 if "bio_evidence_score" in df.columns:
     df = df[df["bio_evidence_score"] >= min_score]
 
-# ----------------------------
-# Top metrics
-# ----------------------------
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Trials loaded", len(trials))
 c2.metric("Filtered trials", len(df))
 c3.metric("Unique sponsors", trials["sponsor"].nunique(dropna=True) if "sponsor" in trials.columns else 0)
 c4.metric("Statuses", status_summary.shape[0])
 
-st.caption("Bio Evidence Score is an explainable heuristic (v1). It’s a signal-strength indicator, not a prediction model.")
+st.caption("Bio Evidence Score is an explainable heuristic (v1). It's a signal-strength indicator, not a prediction model.")
 st.divider()
 
-# ----------------------------
-# Tabs
-# ----------------------------
 tab1, tab2, tab3, tab4 = st.tabs(["Overview", "Trial Finder", "Bio Evidence", "Sponsors"])
 
-# ----------------------------
-# Tab 1: Overview
-# ----------------------------
 with tab1:
     left, right = st.columns(2)
 
@@ -116,9 +92,6 @@ with tab1:
 
     st.caption("Source: ClinicalTrials.gov • Pipeline: Python + R • Automation: GitHub Actions • UI: Streamlit")
 
-# ----------------------------
-# Tab 2: Trial Finder
-# ----------------------------
 with tab2:
     st.subheader("Trial Finder (clickable NCT IDs) — uses Bio table + filters")
     st.write("This table respects your sidebar filters.")
@@ -138,9 +111,6 @@ with tab2:
         mime="text/csv",
     )
 
-# ----------------------------
-# Tab 3: Bio Evidence
-# ----------------------------
 with tab3:
     st.subheader("Bio Evidence Ranking (signals-based, explainable)")
 
@@ -177,9 +147,6 @@ with tab3:
 
     st.dataframe(watch, use_container_width=True)
 
-# ----------------------------
-# Tab 4: Sponsors
-# ----------------------------
 with tab4:
     st.subheader("Top Sponsors (filtered view)")
     if "sponsor" in df.columns:
