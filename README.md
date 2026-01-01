@@ -144,20 +144,6 @@ streamlit run dashboard/app.py
 
 ---
 
-## 2) Add a “Project Architecture” diagram
-Meaning: a simple visual that shows **how data flows through your project**.
-
-### What it should show (minimum)
-- **Source**: ClinicalTrials.gov (or your source)
-- **Python script** → creates `trials_clean.csv`
-- **R script** → creates `trial_bio_evidence.csv`
-- **Streamlit app** → reads those CSVs → dashboards/tabs
-- Optional: **GitHub Actions** weekly refresh
-
-### Option A (best for README): Mermaid diagram (no image needed)
-Paste this into README under a heading like `## 🧱 Project Architecture`:
-
-```md
 ## 🧱 Project Architecture
 
 ```mermaid
