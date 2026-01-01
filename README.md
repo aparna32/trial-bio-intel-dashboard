@@ -139,7 +139,9 @@ streamlit run dashboard/app.py
 ---
 
 ## Project Architecture
-mermaid flowchart TD A[ClinicalTrials.gov] --> B[Python ETL<br/>scripts_py/01_fetch_trials.py] B --> C[data_processed/trials_clean.csv] C --> D[R Scoring Engine<br/>scripts_r/02_bio_evidence_score.R] D --> E[data_processed/trial_bio_evidence.csv] C --> F[Streamlit App<br/>dashboard/app.py] E --> F G[GitHub Actions<br/>Scheduled Refresh] --> B G --> D
+```mermaid
+flowchart TD
+A[ClinicalTrials.gov] --> B[Python ETL<br/>scripts_py/01_fetch_trials.py] B --> C[data_processed/trials_clean.csv] C --> D[R Scoring Engine<br/>scripts_r/02_bio_evidence_score.R] D --> E[data_processed/trial_bio_evidence.csv] C --> F[Streamlit App<br/>dashboard/app.py] E --> F G[GitHub Actions<br/>Scheduled Refresh] --> B G --> D
 
   ---
 
