@@ -80,13 +80,14 @@ The score is:
 ## 📷 Screenshots
 
 ### Overview Dashboard
-![Overview Dashboard](assets/overview.png)
+![Overview Dashboard](assets/Overview.png)
 
-### Bio Evidence Analysis
-![Bio Evidence Dashboard](assets/bio_evidence1.png)
+### Bio Evidence – Score Distribution
+![Bio Evidence Score Distribution](assets/Bio_evidence1.png)
 
-### Bio Evidence Analysis
-![Bio Evidence Dashboard](assets/bio_evidence2.png)
+### Bio Evidence – Risk Flags & Watchlist
+![Bio Evidence Risk & Watchlist](assets/Bio_evidence2.png)
+
 
 ---
 
