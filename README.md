@@ -186,4 +186,13 @@ trial-bio-intel-dashboard/
 - Built for triage and prioritization, not automated decisions
 - Does not replace domain expertise, clinical judgment, or due diligence
 
+  ---
+
+## 🚀 Potential Extensions
+
+- Track score changes over time (longitudinal monitoring).
+- Add therapeutic-area tagging and weighting.
+- Integrate publications / omics datasets for stronger evidence signals.
+- Export an analyst memo (PDF) from the dashboard
+
 
