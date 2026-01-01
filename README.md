@@ -153,8 +153,7 @@ flowchart TD
 
   G[GitHub Actions<br/>Scheduled Refresh] --> B
   G --> D
-
-
+```
   ---
 
   ## 📁 Repository Structure
