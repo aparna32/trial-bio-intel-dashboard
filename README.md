@@ -140,3 +140,34 @@ Rscript scripts_r/02_bio_evidence_score.R
 
 # Launch dashboard
 streamlit run dashboard/app.py
+```
+
+---
+
+## 2) Add a “Project Architecture” diagram
+Meaning: a simple visual that shows **how data flows through your project**.
+
+### What it should show (minimum)
+- **Source**: ClinicalTrials.gov (or your source)
+- **Python script** → creates `trials_clean.csv`
+- **R script** → creates `trial_bio_evidence.csv`
+- **Streamlit app** → reads those CSVs → dashboards/tabs
+- Optional: **GitHub Actions** weekly refresh
+
+### Option A (best for README): Mermaid diagram (no image needed)
+Paste this into README under a heading like `## 🧱 Project Architecture`:
+
+```md
+## 🧱 Project Architecture
+
+```mermaid
+flowchart TD
+  A[ClinicalTrials.gov] --> B[Python: scripts_py/01_fetch_trials.py]
+  B --> C[data_processed/trials_clean.csv]
+  C --> D[R: scripts_r/02_bio_evidence_score.R]
+  D --> E[data_processed/trial_bio_evidence.csv]
+  C --> F[Streamlit: dashboard/app.py]
+  E --> F
+  G[GitHub Actions (weekly)] --> B
+  G --> D
+
