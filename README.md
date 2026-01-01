@@ -26,7 +26,7 @@ This dashboard is **not a prediction model**. It is an **explainable signal-stre
 ### 1. Fetches & processes live trial data
 - Source: **ClinicalTrials.gov**
 - Automated via **Python + R pipeline**
-- Weekly refresh using **GitHub Actions**
+- Scheduled refresh using **GitHub Actions**
 
 ### 2. Computes a Bio Evidence Score (0–100)
 Each trial receives a score based on:
@@ -39,7 +39,7 @@ Each trial receives a score based on:
 
 The score is:
 - Fully explainable  
-- Deterministic (no black-box ML)
+- Deterministic (no black-box ML)  
 - Designed for analyst interpretation  
 
 ### 3. Interactive exploration
@@ -88,7 +88,6 @@ The score is:
 ### Bio Evidence – Risk Flags & Watchlist
 ![Bio Evidence Risk & Watchlist](assets/Bio_evidence2.png)
 
-
 ---
 
 ## 🏗️ Tech Stack
@@ -103,7 +102,7 @@ The score is:
 - CSV handoff for transparency
 
 **Automation**
-- GitHub Actions (weekly refresh)
+- GitHub Actions (scheduled refresh)
 - GitHub Codespaces (development)
 
 ---
@@ -128,24 +127,20 @@ The score is a **heuristic signal**, not a prediction.
 
 ## ▶️ Run Locally
 
+**1) Clone the repo (get the code locally):**
 ```bash
 git clone https://github.com/aparna32/trial-bio-intel-dashboard
 cd trial-bio-intel-dashboard
-
 pip install -r requirements.txt
-
-# Optional: regenerate data
 python scripts_py/01_fetch_trials.py
 Rscript scripts_r/02_bio_evidence_score.R
-
-# Launch dashboard
 streamlit run dashboard/app.py
 ```
 ---
 
-## 🧱 Project Architecture
+## Project Architecture
 
-```mermaid
+mermaid
 flowchart TD
   A[ClinicalTrials.gov] --> B[Python ETL<br/>scripts_py/01_fetch_trials.py]
   B --> C[data_processed/trials_clean.csv]
@@ -158,4 +153,37 @@ flowchart TD
 
   G[GitHub Actions<br/>Scheduled Refresh] --> B
   G --> D
+
+  ---
+
+  ## 📁 Repository Structure
+  ```text
+trial-bio-intel-dashboard/
+│
+├── dashboard/              # Streamlit application
+│   └── app.py
+│
+├── scripts_py/             # Python ingestion & cleaning
+│   └── 01_fetch_trials.py
+│
+├── scripts_r/              # R scoring logic
+│   └── 02_bio_evidence_score.R
+│
+├── data_processed/         # Final, consumable datasets
+│
+├── assets/                 # Screenshots & visuals
+│
+├── requirements.txt
+├── LICENSE
+└── README.md
+```
+---
+
+## ⚠️ Scope & Limitations
+
+- Uses public data only.
+- The score is heuristic and explainable, not predictive ML.
+- Built for triage and prioritization, not automated decisions
+- Does not replace domain expertise, clinical judgment, or due diligence
+
 
