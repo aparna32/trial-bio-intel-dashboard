@@ -76,7 +76,14 @@ This dashboard helps answer:
 
 ## 📷 Screenshots
 
-_(Screenshots added in the next step)_
+### Overview
+![Overview](assets/overview.png)
+
+### Bio Evidence Analysis
+![bio_evidence1](assets/bio_evidence1.png)
+
+### Bio Evidence Analysis
+![bio_evidence2](assets/bio_evidence2.png)
 
 ---
 
